@@ -19,7 +19,35 @@ const auth = (req, res, next) => {
     res.status(401).json({ error: 'Token không hợp lệ' });
   }
 };
+// Thêm vào file admin.js
+router.get('/vehicles', auth, async (req, res) => {
+  try {
+    const { status, cccd } = req.query;
+    const query = {};
+    if (cccd) query.cccd = cccd;
 
+    const users = await User.find(query);
+    const vehicles = users.flatMap((user) =>
+      user.vehicles.map((vehicle) => ({
+        cccd: user.cccd,
+        licensePlate: vehicle.licensePlate,
+        vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+        status: vehicle.status,
+        timestamp: vehicle.lastTransaction?.timestamp,
+        fullName: user.fullName,
+        hometown: user.hometown,
+        dateOfBirth: formatDateToDisplay(user.dateOfBirth),
+        issueDate: formatDateToDisplay(user.issueDate),
+      }))
+    );
+
+    const filteredVehicles = status ? vehicles.filter((v) => v.status === status) : vehicles;
+
+    res.json({ vehicles: filteredVehicles, total: filteredVehicles.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
 const validateLicensePlate = (plate) => {
   if (!plate) return false;
   const cleanPlate = plate.replace(/[-.]/g, '').toUpperCase();
