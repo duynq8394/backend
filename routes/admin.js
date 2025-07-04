@@ -95,8 +95,8 @@ router.post('/add-user', auth, async (req, res) => {
       vehicles: vehicles.map(v => ({
         licensePlate: v.licensePlate,
         vehicleType: v.vehicleType || getVehicleType(v.licensePlate),
-        status: 'Đã lấy',
-        lastTransaction: null,
+        status: v.status || 'Đã lấy',
+        lastTransaction: v.lastTransaction || null,
       })),
     });
     await user.save();
@@ -137,6 +137,25 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
       }
     }
 
+    // Lấy thông tin người dùng hiện tại
+    const currentUser = await User.findOne({ cccd: req.params.cccd });
+    if (!currentUser) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    }
+
+    // Tạo danh sách xe mới, giữ nguyên status và lastTransaction nếu không được cung cấp
+    const updatedVehicles = vehicles.map((newVehicle) => {
+      const existingVehicle = currentUser.vehicles.find(
+        (v) => v.licensePlate === newVehicle.licensePlate
+      );
+      return {
+        licensePlate: newVehicle.licensePlate,
+        vehicleType: newVehicle.vehicleType || getVehicleType(newVehicle.licensePlate),
+        status: newVehicle.status || (existingVehicle ? existingVehicle.status : 'Đã lấy'),
+        lastTransaction: newVehicle.lastTransaction || (existingVehicle ? existingVehicle.lastTransaction : null),
+      };
+    });
+
     const user = await User.findOneAndUpdate(
       { cccd: req.params.cccd },
       {
@@ -146,15 +165,11 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
         gender,
         hometown,
         issueDate,
-        vehicles: vehicles.map(v => ({
-          licensePlate: v.licensePlate,
-          vehicleType: v.vehicleType || getVehicleType(v.licensePlate),
-          status: v.status || 'Đã lấy',
-          lastTransaction: v.lastTransaction || null,
-        })),
+        vehicles: updatedVehicles,
       },
       { new: true }
     );
+
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
     res.json({
       success: true,
