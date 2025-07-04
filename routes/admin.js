@@ -19,35 +19,8 @@ const auth = (req, res, next) => {
     res.status(401).json({ error: 'Token không hợp lệ' });
   }
 };
-// Thêm vào file admin.js
-router.get('/vehicles', auth, async (req, res) => {
-  try {
-    const { status, cccd } = req.query;
-    const query = {};
-    if (cccd) query.cccd = cccd;
 
-    const users = await User.find(query);
-    const vehicles = users.flatMap((user) =>
-      user.vehicles.map((vehicle) => ({
-        cccd: user.cccd,
-        licensePlate: vehicle.licensePlate,
-        vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
-        status: vehicle.status,
-        timestamp: vehicle.lastTransaction?.timestamp,
-        fullName: user.fullName,
-        hometown: user.hometown,
-        dateOfBirth: formatDateToDisplay(user.dateOfBirth),
-        issueDate: formatDateToDisplay(user.issueDate),
-      }))
-    );
-
-    const filteredVehicles = status ? vehicles.filter((v) => v.status === status) : vehicles;
-
-    res.json({ vehicles: filteredVehicles, total: filteredVehicles.length });
-  } catch (error) {
-    res.status(500).json({ error: 'Lỗi server: ' + error.message });
-  }
-});
+// Hàm kiểm tra định dạng biển số xe
 const validateLicensePlate = (plate) => {
   if (!plate) return false;
   const cleanPlate = plate.replace(/[-.]/g, '').toUpperCase();
@@ -55,11 +28,13 @@ const validateLicensePlate = (plate) => {
   return regex.test(cleanPlate);
 };
 
+// Hàm xác định loại xe
 const getVehicleType = (plate) => {
   if (!plate) return undefined;
   return plate.includes('MĐ') ? 'Xe máy điện' : 'Xe máy';
 };
 
+// Định dạng Date thành dd/mm/yyyy
 const formatDateToDisplay = (date) => {
   if (!date) return '';
   if (typeof date === 'string') return date;
@@ -90,10 +65,12 @@ router.post('/add-user', auth, async (req, res) => {
   try {
     const { cccd, oldCmt, fullName, dateOfBirth, gender, hometown, issueDate, vehicles } = req.body;
 
+    // Kiểm tra vehicles
     if (!vehicles || vehicles.length === 0 || vehicles.every(v => !v.licensePlate)) {
       return res.status(400).json({ error: 'Cần ít nhất một biển số xe hợp lệ' });
     }
 
+    // Kiểm tra định dạng và trùng lặp biển số
     for (const vehicle of vehicles) {
       if (!validateLicensePlate(vehicle.licensePlate)) {
         return res.status(400).json({ error: `Biển số xe không hợp lệ: ${vehicle.licensePlate}` });
@@ -108,7 +85,13 @@ router.post('/add-user', auth, async (req, res) => {
     }
 
     const user = new User({
-      cccd, oldCmt, fullName, dateOfBirth, gender, hometown, issueDate,
+      cccd,
+      oldCmt,
+      fullName,
+      dateOfBirth,
+      gender,
+      hometown,
+      issueDate,
       vehicles: vehicles.map(v => ({
         licensePlate: v.licensePlate,
         vehicleType: v.vehicleType || getVehicleType(v.licensePlate),
@@ -135,10 +118,12 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
   try {
     const { cccd, oldCmt, fullName, dateOfBirth, gender, hometown, issueDate, vehicles } = req.body;
 
+    // Kiểm tra vehicles
     if (!vehicles || vehicles.length === 0 || vehicles.every(v => !v.licensePlate)) {
       return res.status(400).json({ error: 'Cần ít nhất một biển số xe hợp lệ' });
     }
 
+    // Kiểm tra định dạng và trùng lặp biển số
     for (const vehicle of vehicles) {
       if (!validateLicensePlate(vehicle.licensePlate)) {
         return res.status(400).json({ error: `Biển số xe không hợp lệ: ${vehicle.licensePlate}` });
@@ -155,7 +140,12 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
     const user = await User.findOneAndUpdate(
       { cccd: req.params.cccd },
       {
-        oldCmt, fullName, dateOfBirth, gender, hometown, issueDate,
+        oldCmt,
+        fullName,
+        dateOfBirth,
+        gender,
+        hometown,
+        issueDate,
         vehicles: vehicles.map(v => ({
           licensePlate: v.licensePlate,
           vehicleType: v.vehicleType || getVehicleType(v.licensePlate),
@@ -179,10 +169,152 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
   }
 });
 
-// Thống kê (yêu cầu admin)
-router.get('/statistics', auth, async (req, res) => {
-    // ... (Giữ nguyên logic thống kê)
+// Lấy danh sách xe trong bãi
+router.get('/vehicles', auth, async (req, res) => {
+  try {
+    const { status, cccd } = req.query;
+    const query = {};
+    if (cccd) query.cccd = cccd;
+
+    const users = await User.find(query);
+    const vehicles = users.flatMap((user) =>
+      user.vehicles.map((vehicle) => ({
+        cccd: user.cccd,
+        licensePlate: vehicle.licensePlate,
+        vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+        status: vehicle.status,
+        timestamp: vehicle.lastTransaction?.timestamp,
+        fullName: user.fullName,
+        hometown: user.hometown,
+        dateOfBirth: formatDateToDisplay(user.dateOfBirth),
+        issueDate: formatDateToDisplay(user.issueDate),
+      }))
+    );
+
+    const filteredVehicles = status ? vehicles.filter((v) => v.status === status) : vehicles;
+
+    res.json({ vehicles: filteredVehicles, total: filteredVehicles.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
 });
 
+// Tìm kiếm xe theo CCCD
+router.get('/search-by-cccd', auth, async (req, res) => {
+  try {
+    const { cccd } = req.query;
+    if (!cccd) {
+      return res.status(400).json({ error: 'Vui lòng cung cấp số CCCD.' });
+    }
+
+    const user = await User.findOne({ cccd });
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng với CCCD này.' });
+    }
+
+    const vehicles = user.vehicles.map((vehicle) => ({
+      cccd: user.cccd,
+      licensePlate: vehicle.licensePlate,
+      vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+      status: vehicle.status,
+      timestamp: vehicle.lastTransaction?.timestamp,
+      fullName: user.fullName,
+      hometown: user.hometown,
+      dateOfBirth: formatDateToDisplay(user.dateOfBirth),
+      issueDate: formatDateToDisplay(user.issueDate),
+    }));
+
+    res.json({ vehicles, total: vehicles.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// Thống kê số xe gửi/lấy theo ngày/tháng và tổng số xe đang gửi
+router.get('/statistics', auth, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    // Chuyển đổi startDate và endDate sang UTC
+    const start = startDate
+      ? new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z')
+      : new Date(new Date().toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const end = endDate
+      ? new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z')
+      : new Date(new Date().toISOString().split('T')[0] + 'T23:59:59.999Z');
+
+    // Thống kê số xe gửi theo ngày
+    const dailyStats = await Transaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: start, $lte: end },
+          action: 'Gửi',
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'UTC' },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id': 1 } },
+    ]);
+
+    // Thống kê số xe gửi/lấy theo tháng
+    const monthlyStats = await Transaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: start, $lte: end },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m', date: '$timestamp', timezone: 'UTC' } },
+            action: '$action',
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          actions: {
+            $push: {
+              action: '$_id.action',
+              count: '$count',
+            },
+          },
+        },
+      },
+      { $sort: { '_id': 1 } },
+      {
+        $project: {
+          _id: 1,
+          actions: { $cond: { if: { $isArray: '$actions' }, then: '$actions', else: [] } },
+        },
+      },
+    ]);
+
+    // Tổng số xe đang gửi
+    const parkedVehicles = await User.aggregate([
+      { $unwind: '$vehicles' },
+      { $match: { 'vehicles.status': 'Đang gửi' } },
+      { $count: 'totalParked' },
+    ]);
+
+    const totalParked = parkedVehicles.length > 0 ? parkedVehicles[0].totalParked : 0;
+
+    res.json({
+      daily: dailyStats,
+      monthly: monthlyStats,
+      totalParked,
+    });
+  } catch (error) {
+    console.error('Error in /statistics:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
 
 module.exports = router;
