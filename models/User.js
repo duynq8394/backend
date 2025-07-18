@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // Hàm xác định loại xe dựa trên biển số
 const getVehicleType = (licensePlate) => {
   if (!licensePlate) return undefined;
-  return licensePlate.includes('MĐ') ? 'Xe máy điện' : 'Xe máy';
+  return licensePlate.toUpperCase().includes('MĐ') ? 'Xe máy điện' : 'Xe máy';
 };
 
 const userSchema = new mongoose.Schema({
@@ -21,6 +21,8 @@ const userSchema = new mongoose.Schema({
       enum: ['Xe máy', 'Xe máy điện'], 
       default: function() { return getVehicleType(this.licensePlate); }
     },
+    color: { type: String, trim: true }, // Thêm trường Màu xe
+    brand: { type: String, trim: true }, // Thêm trường Nhãn hiệu
     status: { type: String, default: 'Đã lấy', enum: ['Đang gửi', 'Đã lấy'] },
     lastTransaction: {
       action: String,
