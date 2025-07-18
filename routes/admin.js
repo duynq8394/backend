@@ -95,6 +95,8 @@ router.post('/add-user', auth, async (req, res) => {
       vehicles: vehicles.map(v => ({
         licensePlate: v.licensePlate,
         vehicleType: v.vehicleType || getVehicleType(v.licensePlate),
+        color: v.color?.trim() || '', // Thêm trường color
+        brand: v.brand?.trim() || '', // Thêm trường brand
         status: v.status || 'Đã lấy',
         lastTransaction: v.lastTransaction || null,
       })),
@@ -143,7 +145,7 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy người dùng' });
     }
 
-    // Tạo danh sách xe mới, giữ nguyên status và lastTransaction nếu không được cung cấp
+    // Tạo danh sách xe mới, giữ nguyên status, lastTransaction, color, brand nếu không được cung cấp
     const updatedVehicles = vehicles.map((newVehicle) => {
       const existingVehicle = currentUser.vehicles.find(
         (v) => v.licensePlate === newVehicle.licensePlate
@@ -151,6 +153,8 @@ router.put('/update-user/:cccd', auth, async (req, res) => {
       return {
         licensePlate: newVehicle.licensePlate,
         vehicleType: newVehicle.vehicleType || getVehicleType(newVehicle.licensePlate),
+        color: newVehicle.color?.trim() || (existingVehicle ? existingVehicle.color : ''), // Thêm trường color
+        brand: newVehicle.brand?.trim() || (existingVehicle ? existingVehicle.brand : ''), // Thêm trường brand
         status: newVehicle.status || (existingVehicle ? existingVehicle.status : 'Đã lấy'),
         lastTransaction: newVehicle.lastTransaction || (existingVehicle ? existingVehicle.lastTransaction : null),
       };
@@ -197,6 +201,8 @@ router.get('/vehicles', auth, async (req, res) => {
         cccd: user.cccd,
         licensePlate: vehicle.licensePlate,
         vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+        color: vehicle.color || '', // Thêm trường color
+        brand: vehicle.brand || '', // Thêm trường brand
         status: vehicle.status,
         timestamp: vehicle.lastTransaction?.timestamp,
         fullName: user.fullName,
@@ -231,6 +237,8 @@ router.get('/search-by-cccd', auth, async (req, res) => {
       cccd: user.cccd,
       licensePlate: vehicle.licensePlate,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+      color: vehicle.color || '', // Thêm trường color
+      brand: vehicle.brand || '', // Thêm trường brand
       status: vehicle.status,
       timestamp: vehicle.lastTransaction?.timestamp,
       fullName: user.fullName,
