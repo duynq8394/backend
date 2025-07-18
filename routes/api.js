@@ -61,8 +61,8 @@ router.post('/scan', async (req, res) => {
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
-      color: vehicle.color || '',
-      brand: vehicle.brand || '',
+      color: vehicle.color || '', // Thêm trường color
+      brand: vehicle.brand || '', // Thêm trường brand
     }));
 
     res.json({ user: userObject });
@@ -105,8 +105,8 @@ router.post('/action', async (req, res) => {
       status: newStatus,
       timestamp: transaction.timestamp,
       vehicleType: user.vehicles[vehicleIndex].vehicleType,
-      color: user.vehicles[vehicleIndex].color || '',
-      brand: user.vehicles[vehicleIndex].brand || '',
+      color: user.vehicles[vehicleIndex].color || '', // Thêm trường color
+      brand: user.vehicles[vehicleIndex].brand || '', // Thêm trường brand
     });
   } catch (error) {
     res.status(500).json({ error: `Lỗi server: ${error.message}` });
@@ -137,8 +137,8 @@ router.get('/search', async (req, res) => {
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
-      color: vehicle.color || '',
-      brand: vehicle.brand || '',
+      color: vehicle.color || '', // Thêm trường color
+      brand: vehicle.brand || '', // Thêm trường brand
     }));
     
     res.json({ user: userObject });
@@ -146,7 +146,6 @@ router.get('/search', async (req, res) => {
     res.status(500).json({ error: 'Lỗi server khi tìm kiếm: ' + error.message });
   }
 });
-
 // Thêm API công khai để đếm số xe đang gửi
 router.get('/public/parked-vehicles', async (req, res) => {
   try {
