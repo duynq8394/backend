@@ -4,26 +4,21 @@ const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 
 // --- CÁC HÀM TIỆN ÍCH ---
-
-// Hàm kiểm tra định dạng biển số xe
 const validateLicensePlate = (plate) => {
   if (!plate) return false;
   const cleanPlate = plate.replace(/[-.]/g, '').toUpperCase();
-  // Regex này đã được đơn giản hóa để phù hợp với logic chung, bạn có thể điều chỉnh nếu cần
   const regex = /^\d{2}[A-Z]{1,2}\d{3,5}$|^(\d{2}MĐ\d)\d{5}$/;
   return regex.test(cleanPlate);
 };
 
-// Hàm xác định loại xe
 const getVehicleType = (plate) => {
   if (!plate) return undefined;
   return plate.includes('MĐ') ? 'Xe máy điện' : 'Xe máy';
 };
 
-// Hàm tiện ích định dạng Date sang chuỗi dd/mm/yyyy để hiển thị
 const formatDateToDisplay = (date) => {
   if (!date) return '';
-  if (typeof date === 'string' && date.includes('/')) return date; // Đã là chuỗi dd/mm/yyyy
+  if (typeof date === 'string' && date.includes('/')) return date;
   const d = new Date(date);
   if (isNaN(d.getTime())) return date.toString();
   const day = String(d.getDate()).padStart(2, '0');
@@ -32,7 +27,6 @@ const formatDateToDisplay = (date) => {
   return `${day}/${month}/${year}`;
 };
 
-// Hàm giải mã chuỗi QR
 const decodeQR = (qrString) => {
   const parts = qrString.split('|');
   return {
@@ -47,8 +41,6 @@ const decodeQR = (qrString) => {
 };
 
 // --- CÁC ROUTES API ---
-
-// API quét QR (Không thay đổi)
 router.post('/scan', async (req, res) => {
   try {
     const { qrString } = req.body;
@@ -69,6 +61,8 @@ router.post('/scan', async (req, res) => {
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+      color: vehicle.color || '', // Thêm trường color
+      brand: vehicle.brand || '', // Thêm trường brand
     }));
 
     res.json({ user: userObject });
@@ -77,12 +71,10 @@ router.post('/scan', async (req, res) => {
   }
 });
 
-// API Gửi/Lấy xe (Không thay đổi)
 router.post('/action', async (req, res) => {
   try {
     const { cccd, licensePlate, action } = req.body;
 
-    // Đơn giản hóa validate, bạn có thể giữ lại regex cũ nếu cần
     if (!licensePlate) {
       return res.status(400).json({ error: 'Biển số xe không hợp lệ.' });
     }
@@ -113,16 +105,14 @@ router.post('/action', async (req, res) => {
       status: newStatus,
       timestamp: transaction.timestamp,
       vehicleType: user.vehicles[vehicleIndex].vehicleType,
+      color: user.vehicles[vehicleIndex].color || '', // Thêm trường color
+      brand: user.vehicles[vehicleIndex].brand || '', // Thêm trường brand
     });
   } catch (error) {
     res.status(500).json({ error: `Lỗi server: ${error.message}` });
   }
 });
 
-
-// =================================================================
-// ĐÃ THÊM: ROUTE TÌM KIẾM CÔNG KHAI (KHÔNG CẦN TOKEN)
-// =================================================================
 router.get('/search', async (req, res) => {
   try {
     const { query } = req.query;
@@ -131,11 +121,9 @@ router.get('/search', async (req, res) => {
     }
 
     let user;
-    // Tìm kiếm theo CCCD hoặc Họ tên không phân biệt chữ hoa/thường
     if (/^\d{12}$/.test(query)) {
       user = await User.findOne({ cccd: query });
     } else {
-      // Sử dụng regex để tìm kiếm không phân biệt chữ hoa/thường
       user = await User.findOne({ fullName: { $regex: new RegExp(query, 'i') } });
     }
 
@@ -143,22 +131,20 @@ router.get('/search', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy người dùng phù hợp.' });
     }
 
-    // Chuyển đổi dữ liệu để trả về cho client
     const userObject = user.toObject();
     userObject.dateOfBirth = formatDateToDisplay(user.dateOfBirth);
     userObject.issueDate = formatDateToDisplay(user.issueDate);
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+      color: vehicle.color || '', // Thêm trường color
+      brand: vehicle.brand || '', // Thêm trường brand
     }));
     
-    // Trả về dữ liệu theo cấu trúc mà frontend mong đợi
     res.json({ user: userObject });
-
   } catch (error) {
     res.status(500).json({ error: 'Lỗi server khi tìm kiếm: ' + error.message });
   }
 });
-// =================================================================
 
 module.exports = router;
