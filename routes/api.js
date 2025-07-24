@@ -61,8 +61,8 @@ router.post('/scan', async (req, res) => {
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
-      color: vehicle.color || '', // Thêm trường color
-      brand: vehicle.brand || '', // Thêm trường brand
+      color: vehicle.color || '',
+      brand: vehicle.brand || '',
     }));
 
     res.json({ user: userObject });
@@ -105,8 +105,8 @@ router.post('/action', async (req, res) => {
       status: newStatus,
       timestamp: transaction.timestamp,
       vehicleType: user.vehicles[vehicleIndex].vehicleType,
-      color: user.vehicles[vehicleIndex].color || '', // Thêm trường color
-      brand: user.vehicles[vehicleIndex].brand || '', // Thêm trường brand
+      color: user.vehicles[vehicleIndex].color || '',
+      brand: user.vehicles[vehicleIndex].brand || '',
     });
   } catch (error) {
     res.status(500).json({ error: `Lỗi server: ${error.message}` });
@@ -121,9 +121,15 @@ router.get('/search', async (req, res) => {
     }
 
     let user;
-    if (/^\d{12}$/.test(query)) {
-      user = await User.findOne({ cccd: query });
+    const cleanQuery = query.replace(/[-.]/g, '').toUpperCase(); // Xóa dấu - và . cho biển số xe
+    if (/^\d{12}$/.test(cleanQuery)) {
+      // Tìm theo CCCD
+      user = await User.findOne({ cccd: cleanQuery });
+    } else if (validateLicensePlate(cleanQuery)) {
+      // Tìm theo biển số xe
+      user = await User.findOne({ 'vehicles.licensePlate': cleanQuery });
     } else {
+      // Tìm theo tên
       user = await User.findOne({ fullName: { $regex: new RegExp(query, 'i') } });
     }
 
@@ -137,8 +143,8 @@ router.get('/search', async (req, res) => {
     userObject.vehicles = userObject.vehicles.map(vehicle => ({
       ...vehicle,
       vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
-      color: vehicle.color || '', // Thêm trường color
-      brand: vehicle.brand || '', // Thêm trường brand
+      color: vehicle.color || '',
+      brand: vehicle.brand || '',
     }));
     
     res.json({ user: userObject });
@@ -146,6 +152,7 @@ router.get('/search', async (req, res) => {
     res.status(500).json({ error: 'Lỗi server khi tìm kiếm: ' + error.message });
   }
 });
+
 // Thêm API công khai để đếm số xe đang gửi
 router.get('/public/parked-vehicles', async (req, res) => {
   try {
