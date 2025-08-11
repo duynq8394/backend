@@ -256,14 +256,36 @@ router.get('/search-by-cccd', auth, async (req, res) => {
 // Thống kê số xe gửi/lấy theo ngày/tháng và tổng số xe đang gửi
 router.get('/statistics', auth, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
-    // Chuyển đổi startDate và endDate sang UTC
-    const start = startDate
-      ? new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z')
-      : new Date(new Date().toISOString().split('T')[0] + 'T00:00:00.000Z');
-    const end = endDate
-      ? new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z')
-      : new Date(new Date().toISOString().split('T')[0] + 'T23:59:59.999Z');
+    const { startDate, endDate, period = 'month' } = req.query;
+    
+    let start, end;
+    
+    // Xử lý period parameter
+    if (startDate && endDate) {
+      // Nếu có startDate và endDate, sử dụng chúng
+      start = new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
+      end = new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z');
+    } else {
+      // Nếu không có, tính toán dựa trên period
+      const now = new Date();
+      end = new Date(now.toISOString().split('T')[0] + 'T23:59:59.999Z');
+      
+      switch (period) {
+        case 'week':
+          start = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          break;
+        case 'year':
+          start = new Date(now.getFullYear(), 0, 1);
+          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          break;
+        case 'month':
+        default:
+          start = new Date(now.getFullYear(), now.getMonth(), 1);
+          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          break;
+      }
+    }
 
     // Thống kê số xe gửi theo ngày
     const dailyStats = await Transaction.aggregate([
@@ -276,7 +298,7 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'UTC' },
+            $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' },
           },
           count: { $sum: 1 },
         },
@@ -294,7 +316,7 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m', date: '$timestamp', timezone: 'UTC' } },
+            date: { $dateToString: { format: '%Y-%m', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
             action: '$action',
           },
           count: { $sum: 1 },
@@ -333,6 +355,9 @@ router.get('/statistics', auth, async (req, res) => {
       daily: dailyStats,
       monthly: monthlyStats,
       totalParked,
+      period,
+      startDate: start.toISOString(),
+      endDate: end.toISOString()
     });
   } catch (error) {
     console.error('Error in /statistics:', error);
@@ -409,16 +434,12 @@ router.get('/dashboard-stats', auth, async (req, res) => {
       timestamp: { $gte: startOfMonth }
     });
 
-    // Tính doanh thu (giả định 10,000đ/lần gửi xe)
-    const revenue = monthlyTransactions * 10000;
-
     res.json({
       totalUsers,
       totalVehicles: totalVehicles.length > 0 ? totalVehicles[0].total : 0,
       parkedVehicles: parkedVehicles.length > 0 ? parkedVehicles[0].total : 0,
       todayTransactions,
-      monthlyTransactions,
-      revenue
+      monthlyTransactions
     });
   } catch (error) {
     console.error('Error in /dashboard-stats:', error);
