@@ -287,20 +287,31 @@ router.get('/statistics', auth, async (req, res) => {
       }
     }
 
-    // Thống kê số xe gửi theo ngày
+    // Thống kê số xe gửi/lấy theo ngày
     const dailyStats = await Transaction.aggregate([
       {
         $match: {
           timestamp: { $gte: start, $lte: end },
-          action: 'Gửi',
         },
       },
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' },
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            action: '$action',
           },
           count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          actions: {
+            $push: {
+              action: '$_id.action',
+              count: '$count',
+            },
+          },
         },
       },
       { $sort: { '_id': 1 } },
