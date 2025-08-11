@@ -340,4 +340,90 @@ router.get('/statistics', auth, async (req, res) => {
   }
 });
 
+// API lấy danh sách người dùng
+router.get('/users', auth, async (req, res) => {
+  try {
+    const users = await User.find().select('-__v');
+    res.json({ users });
+  } catch (error) {
+    console.error('Error in /users:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API xóa người dùng
+router.delete('/users/:cccd', auth, async (req, res) => {
+  try {
+    const { cccd } = req.params;
+    const user = await User.findOne({ cccd });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    }
+
+    // Kiểm tra xem có xe nào đang gửi không
+    const hasParkedVehicles = user.vehicles.some(vehicle => vehicle.status === 'Đang gửi');
+    if (hasParkedVehicles) {
+      return res.status(400).json({ error: 'Không thể xóa người dùng có xe đang gửi' });
+    }
+
+    await User.deleteOne({ cccd });
+    res.json({ message: 'Xóa người dùng thành công' });
+  } catch (error) {
+    console.error('Error in /users/:cccd DELETE:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API lấy thống kê dashboard
+router.get('/dashboard-stats', auth, async (req, res) => {
+  try {
+    // Tổng số người dùng
+    const totalUsers = await User.countDocuments();
+
+    // Tổng số xe
+    const totalVehicles = await User.aggregate([
+      { $unwind: '$vehicles' },
+      { $count: 'total' }
+    ]);
+
+    // Số xe đang gửi
+    const parkedVehicles = await User.aggregate([
+      { $unwind: '$vehicles' },
+      { $match: { 'vehicles.status': 'Đang gửi' } },
+      { $count: 'total' }
+    ]);
+
+    // Giao dịch hôm nay
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTransactions = await Transaction.countDocuments({
+      timestamp: { $gte: today }
+    });
+
+    // Giao dịch tháng này
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const monthlyTransactions = await Transaction.countDocuments({
+      timestamp: { $gte: startOfMonth }
+    });
+
+    // Tính doanh thu (giả định 10,000đ/lần gửi xe)
+    const revenue = monthlyTransactions * 10000;
+
+    res.json({
+      totalUsers,
+      totalVehicles: totalVehicles.length > 0 ? totalVehicles[0].total : 0,
+      parkedVehicles: parkedVehicles.length > 0 ? parkedVehicles[0].total : 0,
+      todayTransactions,
+      monthlyTransactions,
+      revenue
+    });
+  } catch (error) {
+    console.error('Error in /dashboard-stats:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
 module.exports = router;
