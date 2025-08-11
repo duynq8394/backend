@@ -117,7 +117,7 @@ router.get('/search', async (req, res) => {
   try {
     const { query } = req.query;
     if (!query) {
-      return res.status(400).json({ error: 'Vui lòng cung cấp thông tin tìm kiếm.' });
+      return res.status(400).json({ error: 'Vui lòng cung cấp CCCD hoặc biển số xe để tìm kiếm.' });
     }
 
     let user;
@@ -129,8 +129,7 @@ router.get('/search', async (req, res) => {
       // Tìm theo biển số xe
       user = await User.findOne({ 'vehicles.licensePlate': cleanQuery });
     } else {
-      // Tìm theo tên
-      user = await User.findOne({ fullName: { $regex: new RegExp(query, 'i') } });
+      return res.status(400).json({ error: 'Vui lòng nhập CCCD (12 số) hoặc biển số xe hợp lệ.' });
     }
 
     if (!user) {
@@ -184,7 +183,9 @@ router.get('/recent-transactions', async (req, res) => {
       action: transaction.action,
       status: transaction.status,
       timestamp: transaction.timestamp,
-      formattedTime: new Date(transaction.timestamp).toLocaleString('vi-VN')
+      formattedTime: new Date(transaction.timestamp).toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh'
+      })
     }));
 
     res.json({ transactions: formattedTransactions });
@@ -193,15 +194,19 @@ router.get('/recent-transactions', async (req, res) => {
   }
 });
 
-// API tìm kiếm theo 5 số cuối biển số xe
+// API tìm kiếm theo số cuối biển số xe (4 số trở lên)
 router.get('/search-by-plate-suffix', async (req, res) => {
   try {
     const { suffix } = req.query;
-    if (!suffix || suffix.length !== 5) {
-      return res.status(400).json({ error: 'Vui lòng nhập đúng 5 số cuối biển số xe.' });
+    if (!suffix || suffix.length < 4) {
+      return res.status(400).json({ error: 'Vui lòng nhập ít nhất 4 số cuối biển số xe.' });
     }
 
-    // Tìm tất cả biển số xe có 5 số cuối khớp
+    if (!/^\d+$/.test(suffix)) {
+      return res.status(400).json({ error: 'Chỉ được nhập số.' });
+    }
+
+    // Tìm tất cả biển số xe có số cuối khớp
     const users = await User.find({
       'vehicles.licensePlate': { $regex: suffix + '$' }
     });
