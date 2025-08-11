@@ -122,14 +122,34 @@ router.get('/search', async (req, res) => {
 
     let user;
     const cleanQuery = query.replace(/[-.]/g, '').toUpperCase(); // Xóa dấu - và . cho biển số xe
+    
+    // Kiểm tra nếu là 12 số (CCCD)
     if (/^\d{12}$/.test(cleanQuery)) {
-      // Tìm theo CCCD
       user = await User.findOne({ cccd: cleanQuery });
-    } else if (validateLicensePlate(cleanQuery)) {
-      // Tìm theo biển số xe
+    } 
+    // Kiểm tra nếu là 3-4-5 số (biển số xe)
+    else if (/^\d{3,5}$/.test(cleanQuery)) {
+      // Tìm theo số cuối biển số xe
+      const users = await User.find({
+        'vehicles.licensePlate': { $regex: cleanQuery + '$' }
+      });
+      
+      if (users.length > 0) {
+        // Nếu có nhiều xe khớp, lấy xe đầu tiên
+        const matchingVehicle = users[0].vehicles.find(vehicle => 
+          vehicle.licensePlate.endsWith(cleanQuery)
+        );
+        if (matchingVehicle) {
+          user = users[0];
+        }
+      }
+    }
+    // Kiểm tra nếu là biển số xe đầy đủ
+    else if (validateLicensePlate(cleanQuery)) {
       user = await User.findOne({ 'vehicles.licensePlate': cleanQuery });
-    } else {
-      return res.status(400).json({ error: 'Vui lòng nhập CCCD (12 số) hoặc biển số xe hợp lệ.' });
+    } 
+    else {
+      return res.status(400).json({ error: 'Vui lòng nhập CCCD (12 số) hoặc biển số xe (3-5 số hoặc đầy đủ).' });
     }
 
     if (!user) {
@@ -194,12 +214,12 @@ router.get('/recent-transactions', async (req, res) => {
   }
 });
 
-// API tìm kiếm theo số cuối biển số xe (4 số trở lên)
+// API tìm kiếm theo số cuối biển số xe (3 số trở lên)
 router.get('/search-by-plate-suffix', async (req, res) => {
   try {
     const { suffix } = req.query;
-    if (!suffix || suffix.length < 4) {
-      return res.status(400).json({ error: 'Vui lòng nhập ít nhất 4 số cuối biển số xe.' });
+    if (!suffix || suffix.length < 3) {
+      return res.status(400).json({ error: 'Vui lòng nhập ít nhất 3 số cuối biển số xe.' });
     }
 
     if (!/^\d+$/.test(suffix)) {
