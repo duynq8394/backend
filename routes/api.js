@@ -170,4 +170,63 @@ router.get('/public/parked-vehicles', async (req, res) => {
   }
 });
 
+// API lấy lịch sử 5 xe vào ra gần nhất
+router.get('/recent-transactions', async (req, res) => {
+  try {
+    const recentTransactions = await Transaction.find()
+      .sort({ timestamp: -1 })
+      .limit(5);
+
+    const formattedTransactions = recentTransactions.map(transaction => ({
+      id: transaction._id,
+      cccd: transaction.cccd,
+      licensePlate: transaction.licensePlate,
+      action: transaction.action,
+      status: transaction.status,
+      timestamp: transaction.timestamp,
+      formattedTime: new Date(transaction.timestamp).toLocaleString('vi-VN')
+    }));
+
+    res.json({ transactions: formattedTransactions });
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API tìm kiếm theo 5 số cuối biển số xe
+router.get('/search-by-plate-suffix', async (req, res) => {
+  try {
+    const { suffix } = req.query;
+    if (!suffix || suffix.length !== 5) {
+      return res.status(400).json({ error: 'Vui lòng nhập đúng 5 số cuối biển số xe.' });
+    }
+
+    // Tìm tất cả biển số xe có 5 số cuối khớp
+    const users = await User.find({
+      'vehicles.licensePlate': { $regex: suffix + '$' }
+    });
+
+    const matchingVehicles = [];
+    users.forEach(user => {
+      user.vehicles.forEach(vehicle => {
+        if (vehicle.licensePlate.endsWith(suffix)) {
+          matchingVehicles.push({
+            licensePlate: vehicle.licensePlate,
+            vehicleType: vehicle.vehicleType || getVehicleType(vehicle.licensePlate),
+            color: vehicle.color || '',
+            brand: vehicle.brand || '',
+            status: vehicle.status,
+            ownerName: user.fullName,
+            ownerCccd: user.cccd
+          });
+        }
+      });
+    });
+
+    res.json({ vehicles: matchingVehicles });
+  } catch (error) {
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
 module.exports = router;
