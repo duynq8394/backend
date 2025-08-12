@@ -266,36 +266,35 @@ router.get('/statistics', auth, async (req, res) => {
       start = new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
       end = new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z');
     } else {
-      // Nếu không có, tính toán dựa trên period với timezone Vietnam +7
+      // Nếu không có, tính toán dựa trên period (không cần timezone conversion)
       const now = new Date();
-      const vietnamOffset = 7 * 60 * 60 * 1000; // +7 hours in milliseconds
       
-      // Tạo ngày hôm nay theo timezone Vietnam
-      const todayVietnam = new Date(now.getTime() + vietnamOffset);
-      todayVietnam.setHours(23, 59, 59, 999);
-      end = new Date(todayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+      // Tạo ngày hôm nay
+      const today = new Date(now);
+      today.setHours(23, 59, 59, 999);
+      end = today;
       
       switch (period) {
         case 'day':
-          const startOfDayVietnam = new Date(now.getTime() + vietnamOffset);
-          startOfDayVietnam.setHours(0, 0, 0, 0);
-          start = new Date(startOfDayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+          const startOfDay = new Date(now);
+          startOfDay.setHours(0, 0, 0, 0);
+          start = startOfDay;
           break;
         case 'week':
-          const weekAgoVietnam = new Date(now.getTime() + vietnamOffset - (7 * 24 * 60 * 60 * 1000));
-          weekAgoVietnam.setHours(0, 0, 0, 0);
-          start = new Date(weekAgoVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+          const weekAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+          weekAgo.setHours(0, 0, 0, 0);
+          start = weekAgo;
           break;
         case 'year':
-          const startOfYearVietnam = new Date(now.getFullYear(), 0, 1);
-          startOfYearVietnam.setHours(0, 0, 0, 0);
-          start = new Date(startOfYearVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+          const startOfYear = new Date(now.getFullYear(), 0, 1);
+          startOfYear.setHours(0, 0, 0, 0);
+          start = startOfYear;
           break;
         case 'month':
         default:
-          const startOfMonthVietnam = new Date(now.getFullYear(), now.getMonth(), 1);
-          startOfMonthVietnam.setHours(0, 0, 0, 0);
-          start = new Date(startOfMonthVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          startOfMonth.setHours(0, 0, 0, 0);
+          start = startOfMonth;
           break;
       }
     }
@@ -490,24 +489,18 @@ router.get('/dashboard-stats', auth, async (req, res) => {
       { $count: 'total' }
     ]);
 
-    // Giao dịch hôm nay (sử dụng timezone Vietnam +7)
-    const now = new Date();
-    const vietnamOffset = 7 * 60 * 60 * 1000; // +7 hours in milliseconds
-    
-    // Tạo ngày hôm nay theo timezone Vietnam
-    const todayVietnam = new Date(now.getTime() + vietnamOffset);
-    todayVietnam.setHours(0, 0, 0, 0);
-    const today = new Date(todayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+    // Giao dịch hôm nay (không cần timezone conversion)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
     const todayTransactions = await Transaction.countDocuments({
       timestamp: { $gte: today }
     });
 
-    // Giao dịch tháng này (sử dụng timezone Vietnam +7)
-    const startOfMonthVietnam = new Date(now.getTime() + vietnamOffset);
-    startOfMonthVietnam.setDate(1);
-    startOfMonthVietnam.setHours(0, 0, 0, 0);
-    const startOfMonth = new Date(startOfMonthVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+    // Giao dịch tháng này (không cần timezone conversion)
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
     
     const monthlyTransactions = await Transaction.countDocuments({
       timestamp: { $gte: startOfMonth }
