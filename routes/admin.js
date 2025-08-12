@@ -271,6 +271,9 @@ router.get('/statistics', auth, async (req, res) => {
       end = new Date(now.toISOString().split('T')[0] + 'T23:59:59.999Z');
       
       switch (period) {
+        case 'day':
+          start = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          break;
         case 'week':
           start = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
           start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
@@ -315,6 +318,52 @@ router.get('/statistics', auth, async (req, res) => {
         },
       },
       { $sort: { '_id': 1 } },
+    ]);
+
+    // Thống kê số xe gửi/lấy theo tuần
+    const weeklyStats = await Transaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: start, $lte: end },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            week: { $week: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            action: '$action',
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: '$_id.year',
+            week: '$_id.week',
+          },
+          actions: {
+            $push: {
+              action: '$_id.action',
+              count: '$count',
+            },
+          },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.week': 1 } },
+      {
+        $project: {
+          _id: {
+            $concat: [
+              { $toString: '$_id.year' },
+              '-W',
+              { $toString: '$_id.week' }
+            ]
+          },
+          actions: 1
+        }
+      }
     ]);
 
     // Thống kê số xe gửi/lấy theo tháng
@@ -364,6 +413,7 @@ router.get('/statistics', auth, async (req, res) => {
 
     res.json({
       daily: dailyStats,
+      weekly: weeklyStats,
       monthly: monthlyStats,
       totalParked,
       period,
