@@ -254,111 +254,57 @@ router.get('/search-by-cccd', auth, async (req, res) => {
 });
 
 // Thống kê số xe gửi/lấy theo ngày/tháng và tổng số xe đang gửi
-router.get('/statistics', auth, async (req, res) => {
+router.get('/statistics', async (req, res) => {
   try {
-    const { startDate, endDate, period = 'month' } = req.query;
-    
-    let start, end;
-    
-    // Xử lý period parameter
-    if (startDate && endDate) {
-      // Nếu có startDate và endDate, sử dụng chúng
-      start = new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
-      end = new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z');
-    } else {
-      // Nếu không có, tính toán dựa trên period (không cần timezone conversion)
-      const now = new Date();
-      
-      // Tạo ngày hôm nay
-      const today = new Date(now);
-      today.setHours(23, 59, 59, 999);
-      end = today;
-      
-      switch (period) {
-        case 'day':
-          const startOfDay = new Date(now);
-          startOfDay.setHours(0, 0, 0, 0);
-          start = startOfDay;
-          break;
-        case 'week':
-          const weekAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-          weekAgo.setHours(0, 0, 0, 0);
-          start = weekAgo;
-          break;
-        case 'year':
-          const startOfYear = new Date(now.getFullYear(), 0, 1);
-          startOfYear.setHours(0, 0, 0, 0);
-          start = startOfYear;
-          break;
-        case 'month':
-        default:
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          startOfMonth.setHours(0, 0, 0, 0);
-          start = startOfMonth;
-          break;
-      }
-    }
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // Thống kê số xe gửi/lấy theo ngày
+    // DAILY
     const dailyStats = await Transaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: start, $lte: end },
-        },
-      },
+      { $match: { timestamp: { $gte: start, $lte: end } } },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } }, // Không dùng timezone
-            status: '$status',
+            date: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$timestamp',
+                timezone: 'Asia/Bangkok'
+              }
+            },
+            status: '$status'
           },
-          count: { $sum: 1 },
-        },
+          count: { $sum: 1 }
+        }
       },
       {
         $group: {
           _id: '$_id.date',
-          statuses: {
-            $push: {
-              status: '$_id.status',
-              count: '$count',
-            },
-          },
-        },
+          statuses: { $push: { status: '$_id.status', count: '$count' } }
+        }
       },
-      { $sort: { '_id': 1 } },
+      { $sort: { _id: 1 } }
     ]);
 
-    // Thống kê số xe gửi/lấy theo tuần
+    // WEEKLY
     const weeklyStats = await Transaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: start, $lte: end },
-        },
-      },
+      { $match: { timestamp: { $gte: start, $lte: end } } },
       {
         $group: {
           _id: {
-            year: { $year: { date: '$timestamp' } }, // Không dùng timezone
-            week: { $week: { date: '$timestamp' } }, // Không dùng timezone
-            status: '$status',
+            year: { $isoWeekYear: { date: '$timestamp', timezone: 'Asia/Bangkok' } },
+            week: { $isoWeek: { date: '$timestamp', timezone: 'Asia/Bangkok' } },
+            status: '$status'
           },
-          count: { $sum: 1 },
-        },
+          count: { $sum: 1 }
+        }
       },
       {
         $group: {
-          _id: {
-            year: '$_id.year',
-            week: '$_id.week',
-          },
-          statuses: {
-            $push: {
-              status: '$_id.status',
-              count: '$count',
-            },
-          },
-        },
+          _id: { year: '$_id.year', week: '$_id.week' },
+          statuses: { $push: { status: '$_id.status', count: '$count' } }
+        }
       },
       { $sort: { '_id.year': 1, '_id.week': 1 } },
       {
@@ -375,60 +321,47 @@ router.get('/statistics', auth, async (req, res) => {
       }
     ]);
 
-    // Thống kê số xe gửi/lấy theo tháng
+    // MONTHLY
     const monthlyStats = await Transaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: start, $lte: end },
-        },
-      },
+      { $match: { timestamp: { $gte: start, $lte: end } } },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m', date: '$timestamp' } }, // Không dùng timezone
-            status: '$status',
+            date: {
+              $dateToString: {
+                format: '%Y-%m',
+                date: '$timestamp',
+                timezone: 'Asia/Bangkok'
+              }
+            },
+            status: '$status'
           },
-          count: { $sum: 1 },
-        },
+          count: { $sum: 1 }
+        }
       },
       {
         $group: {
           _id: '$_id.date',
-          statuses: {
-            $push: {
-              status: '$_id.status',
-              count: '$count',
-            },
-          },
-        },
+          statuses: { $push: { status: '$_id.status', count: '$count' } }
+        }
       },
-      { $sort: { '_id': 1 } },
-      {
-        $project: {
-          _id: 1,
-          statuses: { $cond: { if: { $isArray: '$statuses' }, then: '$statuses', else: [] } },
-        },
-      },
+      { $sort: { _id: 1 } }
     ]);
 
     // Tổng số xe đang gửi
-    const parkedVehicles = await User.aggregate([
-      { $unwind: '$vehicles' },
-      { $match: { 'vehicles.status': 'Đang gửi' } },
-      { $count: 'totalParked' },
+    const parkedCountAgg = await Transaction.aggregate([
+      { $match: { status: 'Đang gửi' } },
+      { $count: 'totalParked' }
     ]);
-
-    const totalParked = parkedVehicles.length > 0 ? parkedVehicles[0].totalParked : 0;
+    const totalParked = parkedCountAgg.length > 0 ? parkedCountAgg[0].totalParked : 0;
 
     res.json({
       daily: dailyStats,
       weekly: weeklyStats,
       monthly: monthlyStats,
-      totalParked,
-      period,
-      startDate: start.toISOString(),
-      endDate: end.toISOString()
+      totalParked
     });
+
   } catch (error) {
     console.error('Error in /statistics:', error);
     res.status(500).json({ error: 'Lỗi server: ' + error.message });
