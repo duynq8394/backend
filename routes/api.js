@@ -90,7 +90,10 @@ router.post('/action', async (req, res) => {
     }
 
     const newStatus = action === 'Gửi' ? 'Đang gửi' : 'Đã lấy';
-    const timestamp = new Date();
+    // Tạo timestamp với timezone Vietnam (+7) thay vì UTC
+    const now = new Date();
+    const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    const timestamp = vietnamTime;
 
     user.vehicles[vehicleIndex].status = newStatus;
     user.vehicles[vehicleIndex].vehicleType = user.vehicles[vehicleIndex].vehicleType || getVehicleType(licensePlate);
@@ -192,9 +195,14 @@ router.get('/public/parked-vehicles', async (req, res) => {
 // API lấy lịch sử 5 xe vào ra gần nhất
 router.get('/recent-transactions', async (req, res) => {
   try {
+    console.log('Fetching recent transactions...');
+    
     const recentTransactions = await Transaction.find()
       .sort({ timestamp: -1 })
       .limit(5);
+
+    console.log('Found transactions:', recentTransactions.length);
+    console.log('Raw transactions:', recentTransactions);
 
     const formattedTransactions = recentTransactions.map(transaction => {
       // Trả về timestamp gốc từ MongoDB, không chuyển đổi timezone
@@ -209,8 +217,10 @@ router.get('/recent-transactions', async (req, res) => {
       };
     });
 
+    console.log('Formatted transactions:', formattedTransactions);
     res.json({ transactions: formattedTransactions });
   } catch (error) {
+    console.error('Error in /recent-transactions:', error);
     res.status(500).json({ error: 'Lỗi server: ' + error.message });
   }
 });

@@ -266,26 +266,36 @@ router.get('/statistics', auth, async (req, res) => {
       start = new Date(new Date(startDate).toISOString().split('T')[0] + 'T00:00:00.000Z');
       end = new Date(new Date(endDate).toISOString().split('T')[0] + 'T23:59:59.999Z');
     } else {
-      // Nếu không có, tính toán dựa trên period
+      // Nếu không có, tính toán dựa trên period với timezone Vietnam +7
       const now = new Date();
-      end = new Date(now.toISOString().split('T')[0] + 'T23:59:59.999Z');
+      const vietnamOffset = 7 * 60 * 60 * 1000; // +7 hours in milliseconds
+      
+      // Tạo ngày hôm nay theo timezone Vietnam
+      const todayVietnam = new Date(now.getTime() + vietnamOffset);
+      todayVietnam.setHours(23, 59, 59, 999);
+      end = new Date(todayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
       
       switch (period) {
         case 'day':
-          start = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          const startOfDayVietnam = new Date(now.getTime() + vietnamOffset);
+          startOfDayVietnam.setHours(0, 0, 0, 0);
+          start = new Date(startOfDayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
           break;
         case 'week':
-          start = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          const weekAgoVietnam = new Date(now.getTime() + vietnamOffset - (7 * 24 * 60 * 60 * 1000));
+          weekAgoVietnam.setHours(0, 0, 0, 0);
+          start = new Date(weekAgoVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
           break;
         case 'year':
-          start = new Date(now.getFullYear(), 0, 1);
-          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          const startOfYearVietnam = new Date(now.getFullYear(), 0, 1);
+          startOfYearVietnam.setHours(0, 0, 0, 0);
+          start = new Date(startOfYearVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
           break;
         case 'month':
         default:
-          start = new Date(now.getFullYear(), now.getMonth(), 1);
-          start = new Date(start.toISOString().split('T')[0] + 'T00:00:00.000Z');
+          const startOfMonthVietnam = new Date(now.getFullYear(), now.getMonth(), 1);
+          startOfMonthVietnam.setHours(0, 0, 0, 0);
+          start = new Date(startOfMonthVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
           break;
       }
     }
@@ -480,17 +490,25 @@ router.get('/dashboard-stats', auth, async (req, res) => {
       { $count: 'total' }
     ]);
 
-    // Giao dịch hôm nay
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Giao dịch hôm nay (sử dụng timezone Vietnam +7)
+    const now = new Date();
+    const vietnamOffset = 7 * 60 * 60 * 1000; // +7 hours in milliseconds
+    
+    // Tạo ngày hôm nay theo timezone Vietnam
+    const todayVietnam = new Date(now.getTime() + vietnamOffset);
+    todayVietnam.setHours(0, 0, 0, 0);
+    const today = new Date(todayVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+    
     const todayTransactions = await Transaction.countDocuments({
       timestamp: { $gte: today }
     });
 
-    // Giao dịch tháng này
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    // Giao dịch tháng này (sử dụng timezone Vietnam +7)
+    const startOfMonthVietnam = new Date(now.getTime() + vietnamOffset);
+    startOfMonthVietnam.setDate(1);
+    startOfMonthVietnam.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(startOfMonthVietnam.getTime() - vietnamOffset); // Chuyển về UTC để query MongoDB
+    
     const monthlyTransactions = await Transaction.countDocuments({
       timestamp: { $gte: startOfMonth }
     });
