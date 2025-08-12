@@ -92,7 +92,7 @@ router.post('/action', async (req, res) => {
     const newStatus = action === 'Gửi' ? 'Đang gửi' : 'Đã lấy';
     // Tạo timestamp với timezone Vietnam (+7) thay vì UTC
     const now = new Date();
-    const vietnamTime = new Date(now.getTime() + (0 * 60 * 60 * 1000));
+    const vietnamTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
     const timestamp = vietnamTime;
 
     user.vehicles[vehicleIndex].status = newStatus;
