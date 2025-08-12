@@ -301,7 +301,7 @@ router.get('/statistics', auth, async (req, res) => {
         $group: {
           _id: {
             date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
-            action: '$action',
+            status: '$status',
           },
           count: { $sum: 1 },
         },
@@ -309,9 +309,9 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: '$_id.date',
-          actions: {
+          statuses: {
             $push: {
-              action: '$_id.action',
+              status: '$_id.status',
               count: '$count',
             },
           },
@@ -332,7 +332,7 @@ router.get('/statistics', auth, async (req, res) => {
           _id: {
             year: { $year: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
             week: { $week: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
-            action: '$action',
+            status: '$status',
           },
           count: { $sum: 1 },
         },
@@ -343,9 +343,9 @@ router.get('/statistics', auth, async (req, res) => {
             year: '$_id.year',
             week: '$_id.week',
           },
-          actions: {
+          statuses: {
             $push: {
-              action: '$_id.action',
+              status: '$_id.status',
               count: '$count',
             },
           },
@@ -361,7 +361,7 @@ router.get('/statistics', auth, async (req, res) => {
               { $toString: '$_id.week' }
             ]
           },
-          actions: 1
+          statuses: 1
         }
       }
     ]);
@@ -377,7 +377,7 @@ router.get('/statistics', auth, async (req, res) => {
         $group: {
           _id: {
             date: { $dateToString: { format: '%Y-%m', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
-            action: '$action',
+            status: '$status',
           },
           count: { $sum: 1 },
         },
@@ -385,9 +385,9 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: '$_id.date',
-          actions: {
+          statuses: {
             $push: {
-              action: '$_id.action',
+              status: '$_id.status',
               count: '$count',
             },
           },
@@ -397,7 +397,7 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $project: {
           _id: 1,
-          actions: { $cond: { if: { $isArray: '$actions' }, then: '$actions', else: [] } },
+          statuses: { $cond: { if: { $isArray: '$statuses' }, then: '$statuses', else: [] } },
         },
       },
     ]);
