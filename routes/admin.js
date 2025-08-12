@@ -300,7 +300,7 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } }, // Không dùng timezone
             status: '$status',
           },
           count: { $sum: 1 },
@@ -330,8 +330,8 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: {
-            year: { $year: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
-            week: { $week: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            year: { $year: { date: '$timestamp' } }, // Không dùng timezone
+            week: { $week: { date: '$timestamp' } }, // Không dùng timezone
             status: '$status',
           },
           count: { $sum: 1 },
@@ -376,7 +376,7 @@ router.get('/statistics', auth, async (req, res) => {
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m', date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            date: { $dateToString: { format: '%Y-%m', date: '$timestamp' } }, // Không dùng timezone
             status: '$status',
           },
           count: { $sum: 1 },

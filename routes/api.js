@@ -197,25 +197,15 @@ router.get('/recent-transactions', async (req, res) => {
       .limit(5);
 
     const formattedTransactions = recentTransactions.map(transaction => {
-      // Chuyển đổi timezone sang Vietnam (+7)
-      const vietnamTime = new Date(transaction.timestamp.getTime() + (7 * 60 * 60 * 1000));
-      
+      // Trả về timestamp gốc từ MongoDB, không chuyển đổi timezone
       return {
         id: transaction._id,
         cccd: transaction.cccd,
         licensePlate: transaction.licensePlate,
         action: transaction.action,
         status: transaction.status,
-        timestamp: vietnamTime,
-        formattedTime: vietnamTime.toLocaleString('vi-VN', {
-          timeZone: 'Asia/Ho_Chi_Minh',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        })
+        timestamp: transaction.timestamp,
+        // Không format time ở đây, để frontend xử lý
       };
     });
 
