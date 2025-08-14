@@ -793,4 +793,44 @@ router.get('/inventory/session/:sessionId', auth, async (req, res) => {
   }
 });
 
+// API tìm kiếm biển số xe cho inventory (tương tự như search-license-plate)
+router.get('/inventory/search-license-plate/:lastDigits', auth, async (req, res) => {
+  try {
+    const { lastDigits } = req.params;
+    
+    if (!lastDigits || lastDigits.length < 4 || lastDigits.length > 5) {
+      return res.status(400).json({ error: 'Vui lòng nhập 4-5 số cuối của biển số xe' });
+    }
+
+    // Tìm kiếm biển số xe có số cuối khớp
+    const users = await User.find({
+      'vehicles.licensePlate': { $regex: lastDigits + '$', $options: 'i' }
+    }).select('cccd fullName vehicles');
+
+    // Lọc và format kết quả
+    const results = [];
+    users.forEach(user => {
+      user.vehicles.forEach(vehicle => {
+        if (vehicle.licensePlate.endsWith(lastDigits)) {
+          results.push({
+            id: vehicle._id,
+            licensePlate: vehicle.licensePlate,
+            vehicleType: vehicle.vehicleType,
+            color: vehicle.color,
+            brand: vehicle.brand,
+            status: vehicle.status,
+            ownerName: user.fullName,
+            ownerCccd: user.cccd
+          });
+        }
+      });
+    });
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Error in /inventory/search-license-plate:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
 module.exports = router;
