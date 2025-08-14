@@ -348,7 +348,20 @@ router.get('/statistics', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Tổng số xe đang gửi (hiện tại) - dựa trên status
+    // Chuyển đổi format dữ liệu để tương thích với frontend
+    const convertActionsToStatuses = (data) => {
+      return data.map(item => ({
+        ...item,
+        statuses: item.actions ? item.actions.map(action => ({
+          status: action.action === 'Gửi' ? 'Đang gửi' : 'Đã lấy',
+          count: action.count
+        })) : []
+      }));
+    };
+
+    // Tổng số xe đang gửi (hiện tại) - đếm số xe có trạng thái "Đang gửi" hiện tại
+    // Chỉ đếm những xe thực sự đang trong bãi (không phải tất cả giao dịch)
+    // Chỉ đếm những xe thực sự đang trong bãi (không phải tất cả giao dịch)
     const parkedCountAgg = await Transaction.aggregate([
       { $match: { status: 'Đang gửi' } },
       { $count: 'totalParked' }
@@ -356,6 +369,7 @@ router.get('/statistics', async (req, res) => {
     const totalParked = parkedCountAgg.length > 0 ? parkedCountAgg[0].totalParked : 0;
 
     // Tính tổng số xe gửi và lấy mới trong tháng hiện tại (dựa trên action)
+    // Chỉ đếm những giao dịch thực sự xảy ra trong tháng này
     let totalInMonth = 0;
     let totalOutMonth = 0;
 
@@ -371,28 +385,129 @@ router.get('/statistics', async (req, res) => {
       }
     });
 
-    // Chuyển đổi format dữ liệu để tương thích với frontend
-    const convertActionsToStatuses = (data) => {
-      return data.map(item => ({
-        ...item,
-        statuses: item.actions ? item.actions.map(action => ({
-          status: action.action === 'Gửi' ? 'Đang gửi' : 'Đã lấy',
-          count: action.count
-        })) : []
-      }));
-    };
+    // Kiểm tra lại logic bằng cách query trực tiếp
+    const directInMonth = await Transaction.aggregate([
+      { 
+        $match: { 
+          action: 'Gửi',
+          timestamp: { $gte: start, $lte: end }
+        } 
+      },
+      { $count: 'count' }
+    ]);
 
+    const directOutMonth = await Transaction.aggregate([
+      { 
+        $match: { 
+          action: 'Lấy',
+          timestamp: { $gte: start, $lte: end }
+        } 
+      },
+      { $count: 'count' }
+    ]);
+
+    const directInCount = directInMonth.length > 0 ? directInMonth[0].count : 0;
+    const directOutCount = directOutMonth.length > 0 ? directOutMonth[0].count : 0;
+
+    console.log('Statistics Debug Info:');
+    console.log('- Total parked (status = "Đang gửi"):', totalParked);
+    console.log('- Total in month (calculated):', totalInMonth);
+    console.log('- Total out month (calculated):', totalOutMonth);
+    console.log('- Total in month (direct query):', directInCount);
+    console.log('- Total out month (direct query):', directOutCount);
+    console.log('- Date range:', start, 'to', end);
+    console.log('- Daily stats:', dailyStats);
+
+    // Sử dụng kết quả từ direct query để đảm bảo chính xác
     res.json({
       daily: convertActionsToStatuses(dailyStats),
       weekly: convertActionsToStatuses(weeklyStats),
       monthly: convertActionsToStatuses(monthlyStats),
       totalParked,
-      totalInMonth,
-      totalOutMonth
+      totalInMonth: directInCount,
+      totalOutMonth: directOutCount
     });
 
   } catch (error) {
     console.error('Error in /statistics:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API test để kiểm tra dữ liệu thống kê
+router.get('/statistics-debug', async (req, res) => {
+  try {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    // Kiểm tra tất cả giao dịch
+    const allTransactions = await Transaction.find({}).sort({ timestamp: -1 }).limit(10);
+    
+    // Kiểm tra giao dịch có status "Đang gửi"
+    const parkedTransactions = await Transaction.find({ status: 'Đang gửi' }).sort({ timestamp: -1 }).limit(10);
+    
+    // Kiểm tra giao dịch trong tháng này
+    const monthTransactions = await Transaction.find({
+      timestamp: { $gte: start, $lte: end }
+    }).sort({ timestamp: -1 }).limit(10);
+
+    // Đếm theo action
+    const sendCount = await Transaction.countDocuments({ 
+      action: 'Gửi',
+      timestamp: { $gte: start, $lte: end }
+    });
+    
+    const takeCount = await Transaction.countDocuments({ 
+      action: 'Lấy',
+      timestamp: { $gte: start, $lte: end }
+    });
+
+    // Đếm theo status
+    const parkedCount = await Transaction.countDocuments({ status: 'Đang gửi' });
+    const takenCount = await Transaction.countDocuments({ status: 'Đã lấy' });
+
+    res.json({
+      debug: {
+        dateRange: {
+          start: start,
+          end: end,
+          now: now
+        },
+        counts: {
+          totalParked: parkedCount,
+          totalTaken: takenCount,
+          sendThisMonth: sendCount,
+          takeThisMonth: takeCount
+        },
+        samples: {
+          allTransactions: allTransactions.map(t => ({
+            cccd: t.cccd,
+            licensePlate: t.licensePlate,
+            action: t.action,
+            status: t.status,
+            timestamp: t.timestamp
+          })),
+          parkedTransactions: parkedTransactions.map(t => ({
+            cccd: t.cccd,
+            licensePlate: t.licensePlate,
+            action: t.action,
+            status: t.status,
+            timestamp: t.timestamp
+          })),
+          monthTransactions: monthTransactions.map(t => ({
+            cccd: t.cccd,
+            licensePlate: t.licensePlate,
+            action: t.action,
+            status: t.status,
+            timestamp: t.timestamp
+          }))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in /statistics-debug:', error);
     res.status(500).json({ error: 'Lỗi server: ' + error.message });
   }
 });
