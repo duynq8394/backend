@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Admin = require('../models/Admin');
+const InventorySession = require('../models/InventorySession');
+const InventoryRecord = require('../models/InventoryRecord');
 
 // Middleware xác thực admin
 const auth = (req, res, next) => {
@@ -588,6 +590,205 @@ router.get('/dashboard-stats', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error in /dashboard-stats:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API tìm kiếm biển số xe theo 4-5 số cuối
+router.get('/search-license-plate/:lastDigits', auth, async (req, res) => {
+  try {
+    const { lastDigits } = req.params;
+    
+    if (!lastDigits || lastDigits.length < 4 || lastDigits.length > 5) {
+      return res.status(400).json({ error: 'Vui lòng nhập 4-5 số cuối của biển số xe' });
+    }
+
+    // Tìm kiếm biển số xe có số cuối khớp
+    const users = await User.find({
+      'vehicles.licensePlate': { $regex: lastDigits + '$', $options: 'i' }
+    }).select('cccd fullName vehicles');
+
+    // Lọc và format kết quả
+    const results = [];
+    users.forEach(user => {
+      user.vehicles.forEach(vehicle => {
+        if (vehicle.licensePlate.endsWith(lastDigits)) {
+          results.push({
+            id: vehicle._id,
+            licensePlate: vehicle.licensePlate,
+            vehicleType: vehicle.vehicleType,
+            color: vehicle.color,
+            brand: vehicle.brand,
+            status: vehicle.status,
+            ownerName: user.fullName,
+            ownerCccd: user.cccd
+          });
+        }
+      });
+    });
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Error in /search-license-plate:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API bắt đầu phiên kiểm kê mới
+router.post('/inventory/start', auth, async (req, res) => {
+  try {
+    const { sessionName, description } = req.body;
+    
+    // Tạo session kiểm kê mới
+    const inventorySession = new InventorySession({
+      sessionName: sessionName || `Kiểm kê ${new Date().toLocaleDateString('vi-VN')}`,
+      description: description || '',
+      startedBy: req.admin.username,
+      startedAt: new Date(),
+      status: 'active'
+    });
+
+    await inventorySession.save();
+    
+    res.json({ 
+      message: 'Bắt đầu phiên kiểm kê thành công',
+      sessionId: inventorySession._id 
+    });
+  } catch (error) {
+    console.error('Error in /inventory/start:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API ghi nhận kiểm kê biển số xe
+router.post('/inventory/check', auth, async (req, res) => {
+  try {
+    const { sessionId, licensePlate, status, notes } = req.body;
+    
+    if (!sessionId || !licensePlate) {
+      return res.status(400).json({ error: 'Thiếu thông tin session hoặc biển số xe' });
+    }
+
+    // Kiểm tra session có tồn tại và đang active
+    const session = await InventorySession.findById(sessionId);
+    if (!session || session.status !== 'active') {
+      return res.status(400).json({ error: 'Phiên kiểm kê không hợp lệ hoặc đã kết thúc' });
+    }
+
+    // Tạo hoặc cập nhật bản ghi kiểm kê
+    const inventoryRecord = await InventoryRecord.findOneAndUpdate(
+      { sessionId, licensePlate },
+      {
+        sessionId,
+        licensePlate,
+        status: status || 'checked',
+        notes: notes || '',
+        checkedBy: req.admin.username,
+        checkedAt: new Date(),
+        count: 1 // Tăng bộ đếm
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({ 
+      message: 'Ghi nhận kiểm kê thành công',
+      record: inventoryRecord 
+    });
+  } catch (error) {
+    console.error('Error in /inventory/check:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API kết thúc phiên kiểm kê
+router.post('/inventory/end/:sessionId', auth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    // Cập nhật trạng thái session
+    const session = await InventorySession.findByIdAndUpdate(
+      sessionId,
+      { 
+        status: 'completed',
+        endedAt: new Date(),
+        endedBy: req.admin.username
+      },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(404).json({ error: 'Không tìm thấy phiên kiểm kê' });
+    }
+
+    // Lấy tất cả biển số xe trong hệ thống
+    const allVehicles = await User.aggregate([
+      { $unwind: '$vehicles' },
+      { $project: { licensePlate: '$vehicles.licensePlate' } }
+    ]);
+
+    const allLicensePlates = allVehicles.map(v => v.licensePlate);
+
+    // Lấy danh sách biển số đã kiểm kê
+    const checkedRecords = await InventoryRecord.find({ sessionId });
+    const checkedLicensePlates = checkedRecords.map(r => r.licensePlate);
+
+    // Tìm biển số chưa kiểm kê
+    const uncheckedLicensePlates = allLicensePlates.filter(
+      plate => !checkedLicensePlates.includes(plate)
+    );
+
+    // Tạo báo cáo tổng hợp
+    const report = {
+      sessionId,
+      sessionName: session.sessionName,
+      totalVehicles: allLicensePlates.length,
+      checkedVehicles: checkedLicensePlates.length,
+      uncheckedVehicles: uncheckedLicensePlates.length,
+      checkedRecords: checkedRecords,
+      uncheckedLicensePlates: uncheckedLicensePlates,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt
+    };
+
+    res.json({ 
+      message: 'Kết thúc phiên kiểm kê thành công',
+      report 
+    });
+  } catch (error) {
+    console.error('Error in /inventory/end:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API lấy danh sách phiên kiểm kê
+router.get('/inventory/sessions', auth, async (req, res) => {
+  try {
+    const sessions = await InventorySession.find()
+      .sort({ startedAt: -1 })
+      .limit(50);
+    
+    res.json({ sessions });
+  } catch (error) {
+    console.error('Error in /inventory/sessions:', error);
+    res.status(500).json({ error: 'Lỗi server: ' + error.message });
+  }
+});
+
+// API lấy chi tiết phiên kiểm kê
+router.get('/inventory/session/:sessionId', auth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const session = await InventorySession.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Không tìm thấy phiên kiểm kê' });
+    }
+
+    const records = await InventoryRecord.find({ sessionId });
+    
+    res.json({ session, records });
+  } catch (error) {
+    console.error('Error in /inventory/session:', error);
     res.status(500).json({ error: 'Lỗi server: ' + error.message });
   }
 });
