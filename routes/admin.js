@@ -720,20 +720,21 @@ router.post('/inventory/end/:sessionId', auth, async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy phiên kiểm kê' });
     }
 
-    // Lấy tất cả biển số xe trong hệ thống
-    const allVehicles = await User.aggregate([
+    // Lấy tất cả biển số xe có trạng thái "Đang gửi" trong hệ thống
+    const parkedVehicles = await User.aggregate([
       { $unwind: '$vehicles' },
+      { $match: { 'vehicles.status': 'Đang gửi' } },
       { $project: { licensePlate: '$vehicles.licensePlate' } }
     ]);
 
-    const allLicensePlates = allVehicles.map(v => v.licensePlate);
+    const parkedLicensePlates = parkedVehicles.map(v => v.licensePlate);
 
     // Lấy danh sách biển số đã kiểm kê
     const checkedRecords = await InventoryRecord.find({ sessionId });
     const checkedLicensePlates = checkedRecords.map(r => r.licensePlate);
 
-    // Tìm biển số chưa kiểm kê
-    const uncheckedLicensePlates = allLicensePlates.filter(
+    // Tìm biển số chưa kiểm kê (chỉ trong số xe đang gửi)
+    const uncheckedLicensePlates = parkedLicensePlates.filter(
       plate => !checkedLicensePlates.includes(plate)
     );
 
@@ -741,11 +742,11 @@ router.post('/inventory/end/:sessionId', auth, async (req, res) => {
     const report = {
       sessionId,
       sessionName: session.sessionName,
-      totalVehicles: allLicensePlates.length,
+      totalVehicles: parkedLicensePlates.length, // Chỉ đếm xe đang gửi
       checkedVehicles: checkedLicensePlates.length,
       uncheckedVehicles: uncheckedLicensePlates.length,
       checkedRecords: checkedRecords,
-      uncheckedLicensePlates: uncheckedLicensePlates,
+      uncheckedLicensePlates: uncheckedLicensePlates, // Chỉ xe đang gửi chưa kiểm kê
       startedAt: session.startedAt,
       endedAt: session.endedAt
     };
