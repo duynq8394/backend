@@ -256,11 +256,31 @@ router.get('/search-by-cccd', auth, async (req, res) => {
 // Thống kê số xe gửi/lấy theo ngày/tháng và tổng số xe đang gửi
 router.get('/statistics', async (req, res) => {
   try {
+    const { period = 'month', startDate, endDate } = req.query;
+    
+    // Xác định khoảng thời gian
+    let start, end;
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    
+    if (startDate && endDate) {
+      // Nếu có filter date
+      start = new Date(startDate + 'T00:00:00.000Z');
+      end = new Date(endDate + 'T23:59:59.999Z');
+    } else {
+      // Mặc định tháng hiện tại
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    }
 
-    // DAILY - Tính số xe gửi và lấy theo từng ngày (dựa trên action)
+    // Tổng số xe đang gửi (hiện tại) - đếm từ bảng User
+    const parkedVehicles = await User.aggregate([
+      { $unwind: '$vehicles' },
+      { $match: { 'vehicles.status': 'Đang gửi' } },
+      { $count: 'totalParked' }
+    ]);
+    const totalParked = parkedVehicles.length > 0 ? parkedVehicles[0].totalParked : 0;
+
+    // Thống kê theo ngày
     const dailyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
@@ -287,7 +307,7 @@ router.get('/statistics', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // WEEKLY - Tính số xe gửi và lấy theo từng tuần (dựa trên action)
+    // Thống kê theo tuần
     const weeklyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
@@ -321,7 +341,7 @@ router.get('/statistics', async (req, res) => {
       }
     ]);
 
-    // MONTHLY - Tính số xe gửi và lấy theo từng tháng (dựa trên action)
+    // Thống kê theo tháng
     const monthlyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
@@ -348,6 +368,30 @@ router.get('/statistics', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
+    // Tính tổng số xe gửi và lấy trong khoảng thời gian
+    const totalInPeriod = await Transaction.aggregate([
+      { 
+        $match: { 
+          action: 'Gửi',
+          timestamp: { $gte: start, $lte: end }
+        } 
+      },
+      { $count: 'count' }
+    ]);
+
+    const totalOutPeriod = await Transaction.aggregate([
+      { 
+        $match: { 
+          action: 'Lấy',
+          timestamp: { $gte: start, $lte: end }
+        } 
+      },
+      { $count: 'count' }
+    ]);
+
+    const totalIn = totalInPeriod.length > 0 ? totalInPeriod[0].count : 0;
+    const totalOut = totalOutPeriod.length > 0 ? totalOutPeriod[0].count : 0;
+
     // Chuyển đổi format dữ liệu để tương thích với frontend
     const convertActionsToStatuses = (data) => {
       return data.map(item => ({
@@ -359,73 +403,25 @@ router.get('/statistics', async (req, res) => {
       }));
     };
 
-    // Tổng số xe đang gửi (hiện tại) - đếm số xe có trạng thái "Đang gửi" hiện tại
-    // Chỉ đếm những xe thực sự đang trong bãi (không phải tất cả giao dịch)
-    // Chỉ đếm những xe thực sự đang trong bãi (không phải tất cả giao dịch)
-    const parkedCountAgg = await Transaction.aggregate([
-      { $match: { status: 'Đang gửi' } },
-      { $count: 'totalParked' }
-    ]);
-    const totalParked = parkedCountAgg.length > 0 ? parkedCountAgg[0].totalParked : 0;
-
-    // Tính tổng số xe gửi và lấy mới trong tháng hiện tại (dựa trên action)
-    // Chỉ đếm những giao dịch thực sự xảy ra trong tháng này
-    let totalInMonth = 0;
-    let totalOutMonth = 0;
-
-    dailyStats.forEach(day => {
-      if (day.actions && Array.isArray(day.actions)) {
-        day.actions.forEach(actionItem => {
-          if (actionItem.action === 'Gửi') {
-            totalInMonth += actionItem.count;
-          } else if (actionItem.action === 'Lấy') {
-            totalOutMonth += actionItem.count;
-          }
-        });
-      }
-    });
-
-    // Kiểm tra lại logic bằng cách query trực tiếp
-    const directInMonth = await Transaction.aggregate([
-      { 
-        $match: { 
-          action: 'Gửi',
-          timestamp: { $gte: start, $lte: end }
-        } 
-      },
-      { $count: 'count' }
-    ]);
-
-    const directOutMonth = await Transaction.aggregate([
-      { 
-        $match: { 
-          action: 'Lấy',
-          timestamp: { $gte: start, $lte: end }
-        } 
-      },
-      { $count: 'count' }
-    ]);
-
-    const directInCount = directInMonth.length > 0 ? directInMonth[0].count : 0;
-    const directOutCount = directOutMonth.length > 0 ? directOutMonth[0].count : 0;
-
     console.log('Statistics Debug Info:');
-    console.log('- Total parked (status = "Đang gửi"):', totalParked);
-    console.log('- Total in month (calculated):', totalInMonth);
-    console.log('- Total out month (calculated):', totalOutMonth);
-    console.log('- Total in month (direct query):', directInCount);
-    console.log('- Total out month (direct query):', directOutCount);
     console.log('- Date range:', start, 'to', end);
-    console.log('- Daily stats:', dailyStats);
+    console.log('- Total parked (from User):', totalParked);
+    console.log('- Total in period:', totalIn);
+    console.log('- Total out period:', totalOut);
+    console.log('- Period:', period);
 
-    // Sử dụng kết quả từ direct query để đảm bảo chính xác
     res.json({
       daily: convertActionsToStatuses(dailyStats),
       weekly: convertActionsToStatuses(weeklyStats),
       monthly: convertActionsToStatuses(monthlyStats),
       totalParked,
-      totalInMonth: directInCount,
-      totalOutMonth: directOutCount
+      totalIn,
+      totalOut,
+      period,
+      dateRange: {
+        start: start.toISOString(),
+        end: end.toISOString()
+      }
     });
 
   } catch (error) {
