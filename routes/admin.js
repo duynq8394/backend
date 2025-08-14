@@ -260,7 +260,7 @@ router.get('/statistics', async (req, res) => {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // DAILY
+    // DAILY - Tính số xe gửi và lấy theo từng ngày
     const dailyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
@@ -270,7 +270,7 @@ router.get('/statistics', async (req, res) => {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$timestamp',
-                timezone: 'Asia/Bangkok'
+                timezone: 'Asia/Ho_Chi_Minh'
               }
             },
             status: '$status'
@@ -287,14 +287,14 @@ router.get('/statistics', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // WEEKLY
+    // WEEKLY - Tính số xe gửi và lấy theo từng tuần
     const weeklyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
         $group: {
           _id: {
-            year: { $isoWeekYear: { date: '$timestamp', timezone: 'Asia/Bangkok' } },
-            week: { $isoWeek: { date: '$timestamp', timezone: 'Asia/Bangkok' } },
+            year: { $isoWeekYear: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
+            week: { $isoWeek: { date: '$timestamp', timezone: 'Asia/Ho_Chi_Minh' } },
             status: '$status'
           },
           count: { $sum: 1 }
@@ -321,7 +321,7 @@ router.get('/statistics', async (req, res) => {
       }
     ]);
 
-    // MONTHLY
+    // MONTHLY - Tính số xe gửi và lấy theo từng tháng
     const monthlyStats = await Transaction.aggregate([
       { $match: { timestamp: { $gte: start, $lte: end } } },
       {
@@ -331,7 +331,7 @@ router.get('/statistics', async (req, res) => {
               $dateToString: {
                 format: '%Y-%m',
                 date: '$timestamp',
-                timezone: 'Asia/Bangkok'
+                timezone: 'Asia/Ho_Chi_Minh'
               }
             },
             status: '$status'
@@ -348,18 +348,36 @@ router.get('/statistics', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Tổng số xe đang gửi
+    // Tổng số xe đang gửi (hiện tại)
     const parkedCountAgg = await Transaction.aggregate([
       { $match: { status: 'Đang gửi' } },
       { $count: 'totalParked' }
     ]);
     const totalParked = parkedCountAgg.length > 0 ? parkedCountAgg[0].totalParked : 0;
 
+    // Tính tổng số xe gửi và lấy trong tháng hiện tại
+    let totalInMonth = 0;
+    let totalOutMonth = 0;
+
+    dailyStats.forEach(day => {
+      if (day.statuses && Array.isArray(day.statuses)) {
+        day.statuses.forEach(statusItem => {
+          if (statusItem.status === 'Đang gửi') {
+            totalInMonth += statusItem.count;
+          } else if (statusItem.status === 'Đã lấy') {
+            totalOutMonth += statusItem.count;
+          }
+        });
+      }
+    });
+
     res.json({
       daily: dailyStats,
       weekly: weeklyStats,
       monthly: monthlyStats,
-      totalParked
+      totalParked,
+      totalInMonth,
+      totalOutMonth
     });
 
   } catch (error) {
